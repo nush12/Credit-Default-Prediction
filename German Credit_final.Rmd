@@ -1,0 +1,481 @@
+---
+title: "German Credit Scoring"
+author: "Anusha Chintakunta Manjunatha"
+date: "February 19, 2018"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(MASS)
+library(dplyr)
+library(purrr)
+library(broom)
+library(car)
+library(ggplot2)
+library(leaps)
+library(glmnet)
+library(pROC)
+library(boot)
+library(rpart)
+library(rpart.plot)
+library(knitr)
+library(tidyr)
+library(reshape2)
+library(RColorBrewer)
+library(GGally)
+library(caret)
+library(verification)
+library(ggplot2)
+
+
+set.seed(12948552)
+
+german_credit = read.table("http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data")
+
+colnames(german_credit) = c("chk_acct","duration","credit_his","purpose",
+                            "amount","saving_acct","present_emp","installment_rate",
+                            "sex","other_debtor","present_resid","property","age",
+                            "other_install","housing","n_credits","job","n_people",
+                            "telephone","foreign","response")
+
+
+german_credit$response = german_credit$response - 1
+german_credit$response <- as.factor(german_credit$response)
+
+```
+
+## German Credit{.tabset .tabset-fade}
+
+
+### Logistic Regression {.tabset .tabset-fade .tabset-pills}
+
+#### Exploratory Analysis
+
+
+##### Exploratory Analysis
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+str(german_credit)
+
+summary(german_credit)
+
+
+## Installment Rate
+
+ggplot(german_credit, aes(factor(installment_rate), ..count..)) + 
+ geom_bar(aes(fill = response), position = "dodge") + xlab("Installment Rates") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+
+# Age
+
+ggplot(melt(german_credit[,c(13,21)]), aes(x = variable, y = value, fill = response)) + 
+geom_boxplot() + xlab("response") + ylab("age") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# n_credits
+
+ggplot(melt(german_credit[,c(16,21)]), aes(x = variable, y = value, fill = response)) + 
+  geom_boxplot() +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# chk_acct
+
+ggplot(german_credit, aes(chk_acct, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# credit_his
+
+ggplot(german_credit, aes(credit_his, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# purpose
+
+ggplot(german_credit, aes(purpose, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# saving_acct
+
+ggplot(german_credit, aes(saving_acct, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# other_debtor
+
+ggplot(german_credit, aes(other_debtor, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# sex
+
+ggplot(german_credit, aes(sex, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# other install
+
+ggplot(german_credit, aes(other_install, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+# foreign
+
+ggplot(german_credit, aes(foreign, ..count..)) + 
+  geom_bar(aes(fill = response), position = "dodge") +
+  scale_fill_manual(values = c("#8372A8", "#C1C962"))
+
+```
+
+#### Logit, Probit and Cloglog
+
+
+##### Comparison of Logit, Probit and Cloglog
+
+
+```{r echo = TRUE}
+
+
+
+rows <- sample(nrow(german_credit))
+german_credit_randomized <- german_credit[rows, ]
+
+split_german_credit <- round(nrow(german_credit_randomized)*0.75)
+train_german_credit <- german_credit_randomized[1:split_german_credit, ]
+test_german_credit <- german_credit_randomized[(split_german_credit + 1):nrow(german_credit_randomized), ]
+
+
+
+```
+
+For logit model, **AIC** came out to be 791.727. For probit model, AIC came out to be 790.26. And, for cloglog model, AIC came out to be 789.07. The significant parameters are similar for all the three link functions.
+
+For logit model, **BIC** came out to be 1017.82 For probit model, BIC came out to be 1016.63 And, for cloglog model, BIC came out to be 1015.46 
+
+##### Logit Model
+
+```{r echo = TRUE}
+
+
+
+null_log <- glm(formula = response~1, family = "binomial", data = train_german_credit)
+full_log <- glm(formula = response ~ . , family = "binomial", 
+                data = train_german_credit)
+
+summary(full_log)
+AIC(full_log)
+BIC(full_log)
+
+
+
+```
+
+
+##### Probit Model
+
+
+```{r echo = TRUE}
+
+
+full_probit <- glm(formula = response ~ . , family = binomial(link = "probit"), 
+                   data = train_german_credit)
+
+summary(full_probit)
+AIC(full_probit)
+BIC(full_probit)
+
+
+
+```
+
+##### Complimentary Log Log Model
+
+
+```{r echo = TRUE}
+
+
+
+full_cloglog <- glm(formula = response ~ . , family = binomial(link = "cloglog"), 
+                   data = train_german_credit)
+
+summary(full_cloglog)
+AIC(full_cloglog)
+BIC(full_cloglog)
+
+```
+
+
+
+#### Insample Prediction
+
+
+##### Stepwise Selection and Insample Prediction
+
+
+
+##### Stepwise Selection 
+
+
+```{r echo = TRUE, results="hide"}
+
+
+stepwise_AICmodel <- step(full_log,direction = "both")
+
+stepwise_BICmodel <- step(full_log,direction = "both", k = log(nrow(train_german_credit)))
+
+
+
+```
+
+
+Variables selected after applying Stepwise AIC are chk_acct, duration, credit_his, purpose, amount, present_emp, installment_rate, sex, other_debtor, other_install, n_credits, n_people and foreign
+
+**AIC** is `r AIC(stepwise_AICmodel)`  
+
+
+Variables selected after applying Stepwise BIC are chk_acct and duration
+
+
+**BIC** is `r BIC(stepwise_BICmodel)`
+
+
+
+
+##### LASSO Selection 
+
+
+```{r echo = TRUE}
+
+
+
+dummy <- model.matrix(~., data = german_credit) #converting data to numeric matrix
+dummy <- dummy[,-1] 
+nrow(german_credit)
+
+rows_dummy <- sample(nrow(dummy))
+dummy_randomized <- dummy[rows_dummy, ]
+
+split_dummy <- round(nrow(dummy_randomized)*0.75)
+train_dummy <- dummy_randomized[1:split_dummy, ]
+test_dummy <- dummy_randomized[(split_dummy + 1):nrow(dummy_randomized), ]
+
+
+credit_lasso <- cv.glmnet(x = as.matrix(train_dummy[,-49]), y = train_dummy[,49], 
+                          family = "binomial", type.measure = "class", alpha = 1)
+
+
+
+
+plot(credit_lasso)
+coef(credit_lasso, credit_lasso$lambda.min)
+
+
+
+```
+
+Variables selected for in sample prediction are based on Stepwise AIC model.
+
+
+##### In Sample Selection 
+
+The logistic model has been fitted based on the variable selected from the above the step,
+The ROC curve is plotted and the area under the curve was found to be 0.8182. The misclassification rate (false negative rate) is calculated to be 0.221.
+
+
+```{r echo = TRUE}
+
+
+best_insample <- glm(formula = response ~ chk_acct + duration + credit_his + purpose + amount + present_emp + installment_rate + sex + other_debtor +  other_install+ foreign + n_credits + n_people, family = "binomial", data = train_german_credit)
+
+insample_pred <- predict(best_insample, 
+                      type = "response")
+
+
+insample_ROC <- roc(train_german_credit$response,insample_pred)
+plot(insample_ROC, col = "blue")
+auc(insample_ROC)
+insamplecutoff_prob <- coords(insample_ROC,"best",ret = "threshold")
+
+
+
+insample_class <- ifelse(insample_pred > insamplecutoff_prob, 1, 0)
+table(insample_class,train_german_credit$response,
+      dnn = list("predicted", "actual"))
+
+
+```
+
+#### Out of Sample Prediction
+
+
+##### Out of Sample Prediction
+
+The ROC curve is plotted and the area under the curve was found to be 0.8124. The misclassification rate (false negative rate) is calculated to be 0.138
+
+
+```{r echo = TRUE}
+
+
+best_log <- glm(formula = response ~ chk_acct + duration + credit_his + purpose + amount + present_emp + installment_rate + sex + other_debtor +  other_install+ foreign + n_credits + n_people, family = "binomial", data = train_german_credit)
+
+train_prob <- predict(best_log, type = "response")
+
+german_credit_prob <- predict(best_log, newdata = test_german_credit[,-21], type = "response")
+
+ROC <- roc(test_german_credit$response,german_credit_prob)
+plot(ROC, col = "blue")
+auc(ROC)
+cutoff_prob <- coords(ROC,"best",ret = "threshold")
+
+
+
+german_credit_pred <- ifelse(german_credit_prob > cutoff_prob, 1, 0)
+table(german_credit_pred,test_german_credit$response,
+      dnn = list("predicted", "actual"))
+
+
+```
+
+#### Grid Search
+
+
+##### Grid Search to determine optimal cut-off probability
+
+The asymmetric cost function has been used to calculate the optimal cut off rate. After using the optimal cut off value, the misclassification rate came down to **0.138** from **0.061**. The optimal cut-off value is **0.15**
+
+
+```{r echo = TRUE}
+
+
+
+costfunc <- function(obs, pred.p, pcut) {
+  weight1 <- 5   # define the weight for "true=1 but pred=0" (FN)
+  weight0 <- 1    # define the weight for "true=0 but pred=1" (FP)
+  c1 <- (obs == 1) & (pred.p < pcut)    # count for "true=1 but pred=0"   (FN)
+  c0 <- (obs == 0) & (pred.p >= pcut)   # count for "true=0 but pred=1"   (FP)
+  cost <- mean(weight1 * c1 + weight0 * c0)  # misclassification with weight
+  return(cost) # you have to return to a value when you write R functions
+}
+
+p.seq <- seq(0.01, 1, 0.01)
+
+cost <- rep(0, length(p.seq))  
+
+for (i in 1:length(p.seq)) { 
+  cost[i] = costfunc(obs = train_german_credit$response, 
+                     pred.p = train_prob, pcut = p.seq[i])  
+} 
+
+plot(p.seq, cost)
+
+optimal.pcut.glm0 <- p.seq[which(cost == min(cost))]
+
+
+german_credit_pred <- ifelse(german_credit_prob > optimal.pcut.glm0, 1, 0)
+table(german_credit_pred,test_german_credit$response, 
+      dnn = list("predicted", "actual"))
+
+
+
+```
+
+
+
+#### Cross-Validation
+
+
+##### Cross-Validation
+
+Based on the cross validation function, the misclassification rate (overall error rate) is found out to be **0.535**.
+
+```{r echo = TRUE}
+
+
+pcut <- optimal.pcut.glm0
+
+costfunc2 <- function(obs, pred.p){
+  weight1 <- 5   # define the weight for "true=1 but pred=0" (FN)
+  weight0 <- 1    # define the weight for "true=0 but pred=1" (FP)
+  c1 <- (obs == 1) & (pred.p < pcut)    # count for "true=1 but pred=0"   (FN)
+  c0 <- (obs == 0) & (pred.p >= pcut)   # count for "true=0 but pred=1"   (FP)
+  cost <- mean(weight1 * c1 + weight0 * c0)  # misclassification with weight
+  return(cost) # you have to return to a value when you write R functions
+}
+
+credit_glm1 <- glm(response~. , family = binomial, data = german_credit)
+cv.result <-  cv.glm(data = german_credit, glmfit = credit_glm1, cost = costfunc2, K = 4) 
+cv.result$delta[2]
+
+
+
+```
+
+
+
+### Classification Tree {.tabset .tabset-fade .tabset-pills}
+
+#### Out of Sample Prediction
+
+
+##### Out of Sample Prediction
+
+The misclassification rate (false negative rate) is **0.076** and is higher than that of the logistic regression model (**0.061**).
+
+```{r echo = TRUE}
+
+tree_model <- rpart(formula = response ~ chk_acct + duration + credit_his + purpose +            amount + present_emp + installment_rate + sex + other_debtor +  other_install+            foreign + n_credits + n_people, data = train_german_credit, method = "class", parms = list(loss = matrix(c(0,5,1,0), nrow = 2)))
+
+
+
+prp(tree_model, extra = 1)
+
+
+tree_predict <- predict(tree_model, test_german_credit[,-21], type = "class")
+
+
+table(test_german_credit$response, tree_predict, dnn = c("Actual","Predicted"))
+
+
+```
+
+#### Cross-Validation
+
+
+##### Cross-Validation
+
+The misclassification rate (false negative rate) is **0.061** and is same as  that of the logistic regression model.
+
+```{r echo = TRUE}
+
+
+credit_rpart <- rpart(formula = response ~ . , data = train_german_credit, method = "class", 
+                       parms = list(loss = matrix(c(0,5,1,0), nrow = 2)), cp = 0.0001)
+
+
+
+plotcp(credit_rpart)
+
+prp(prune(credit_rpart, cp = 0.012)) # Pruning the tree
+
+
+credit_rpartbest <- rpart(formula = response ~ . , data = train_german_credit, method = "class", 
+                      parms = list(loss = matrix(c(0,5,1,0), nrow = 2)), cp = 0.012)
+
+prp(credit_rpartbest, extra = 1)
+
+credit_testpredict <- predict(credit_rpartbest, test_german_credit[,-21], type = "class")
+
+
+table(test_german_credit$response, credit_testpredict, dnn = c("Actual","Predicted"))
+
+
+
+```
+
+
